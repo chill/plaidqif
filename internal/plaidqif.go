@@ -18,6 +18,11 @@ type PlaidQIF struct {
 	listenAddr   string
 }
 
+const (
+	DateFormat = "02/01/2006"
+	timeFormat = "3:04PM MST"
+)
+
 var validPlaidEnvs = map[string]plaid.Environment{
 	"sandbox":     plaid.Sandbox,
 	"development": plaid.Development,

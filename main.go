@@ -29,17 +29,16 @@ var (
 
 	listInstitutions = root.Command("list-ins", "List institutions")
 
-	listAccounts    = root.Command("list-accounts", "List accounts from an institution")
-	listInstitution = listAccounts.Arg("institution", "Institution to list accounts from").Required().String()
+	listAccounts            = root.Command("list-accounts", "List accounts from an institution")
+	listAccountInstitutions = listAccounts.Arg("institutions", "Institution to list accounts from").Required().Strings()
 
 	configureAccount   = root.Command("configure-account", "Configure an account with a friendly name and account type")
 	accountName        = configureAccount.Arg("name", "Your friendly name for the account, also used as !Account header in QIF").Required().String()
-	accountType        = configureAccount.Arg("type", "Type of account, used as !Type header in QIF, probably just Bank or CCard").Required().String()
 	accountInstitution = configureAccount.Arg("institution", "Institution account is with").Required().String()
 	accountID          = configureAccount.Arg("id", "Plaid Account ID, can be determined using plaidqif list-accounts").Required().String()
 
 	downloadTransactions = root.Command("download", "Download transactions into QIFs")
-	downloadTo           = downloadTransactions.Flag("until", "Date to download transactions up to, inclusive, any Go-supported date format").Default(time.Now().Format("02/01/2006")).String()
+	downloadTo           = downloadTransactions.Flag("until", "Date to download transactions up to, inclusive, any Go-supported date format").Default(time.Now().Format(internal.DateFormat)).String()
 	downloadOutDir       = downloadTransactions.Flag("outdir", "Directory to write QIFs into, defaults to current working dir").Default(mustWorkingDir()).ExistingDir()
 	downloadFrom         = downloadTransactions.Arg("from", "Date to download transactions from, inclusive, any Go-supported date format").Required().String()
 	downloadAccounts     = downloadTransactions.Arg("accounts", "Account(s) to download, by their friendly name you configured, defaults to all accounts").Strings()
@@ -70,7 +69,9 @@ func main() {
 	case listInstitutions.FullCommand():
 		err = pq.ListInstitutions()
 	case listAccounts.FullCommand():
+		err = pq.ListAccounts(*listAccountInstitutions)
 	case configureAccount.FullCommand():
+		err = pq.ConfigureAccount(*accountName, *accountInstitution, *accountID)
 	case downloadTransactions.FullCommand():
 	default:
 		kingpin.Fatalf("Unknown command ")

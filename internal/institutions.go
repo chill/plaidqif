@@ -6,13 +6,16 @@ import (
 	"path/filepath"
 	"sort"
 	"text/tabwriter"
+	"time"
 )
 
 type Institutions map[string]Institution
 
 type Institution struct {
-	AccessToken string
-	ItemID      string
+	AccessToken    string
+	ItemID         string
+	Accounts       Accounts   `json:",omitempty"`
+	ConsentExpires *time.Time `json:",omitempty"`
 }
 
 func (p *PlaidQIF) ListInstitutions() error {
@@ -71,5 +74,5 @@ func writeInstitutions(confDir string, institutions Institutions) error {
 		return err
 	}
 
-	return marshalFile(credPath(confDir), "institutions", institutions)
+	return marshalFile(institutionsPath(confDir), "institutions", institutions)
 }
