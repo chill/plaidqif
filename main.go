@@ -5,6 +5,7 @@ import (
 	"path/filepath"
 	"time"
 
+	"github.com/chill/plaidqif/internal"
 	"gopkg.in/alecthomas/kingpin.v2"
 )
 
@@ -12,7 +13,7 @@ import (
 
 var (
 	root        = kingpin.New("plaidqif", "Downloads transactions from financial institutions using Plaid, and converts them to QIF files")
-	configDir   = root.Flag("config", "Directory where plaintext plaidqif configuration is stored").Default(filepath.Join(mustHomeDir(), ".plaidqif")).PlaceHolder("$HOME/.plaidqif").String()
+	configDir   = root.Flag("confdir", "Directory where plaintext plaidqif configuration is stored").Default(filepath.Join(mustHomeDir(), ".plaidqif")).PlaceHolder("$HOME/.plaidqif").String()
 	plaidEnv    = root.Flag("environment", "Plaid environment to connect to").Default("development").String()
 	clientName  = root.Flag("client", "Name of your client to connect to Plaid with").Default("plaidqif").String()
 	countryCode = root.Flag("countrycode", "Plaid countryCode to connect with").Default("GB").String()
@@ -45,8 +46,26 @@ var (
 )
 
 func main() {
-	switch kingpin.MustParse(root.Parse(os.Args[1:])) {
-	case setupCreds.FullCommand():
+	cmd := kingpin.MustParse(root.Parse(os.Args[1:]))
+
+	if cmd == setupCreds.FullCommand() {
+		if err := internal.WriteCredentials(*configDir, internal.Credentials{
+			ClientID:  *clientID,
+			PublicKey: *publicKey,
+			Secret:    *secret,
+		}); err != nil {
+			kingpin.Fatalf("%v", err)
+		}
+
+		return
+	}
+
+	_, err := internal.PlaidQif(*configDir, *plaidEnv, *clientName, *countryCode, *listenPort)
+	if err != nil {
+		kingpin.Fatalf("%v", err)
+	}
+
+	switch cmd {
 	case institutionSetup.FullCommand():
 	case listInstitutions.FullCommand():
 	case listAccounts.FullCommand():
@@ -54,7 +73,6 @@ func main() {
 	case downloadTransactions.FullCommand():
 	default:
 		kingpin.Fatalf("Unknown command ")
-
 	}
 }
 
