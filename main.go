@@ -60,7 +60,7 @@ func main() {
 		return
 	}
 
-	_, err := internal.PlaidQif(*configDir, *plaidEnv, *clientName, *countryCode, *listenPort)
+	pq, err := internal.PlaidQif(*configDir, *plaidEnv, *clientName, *countryCode, *listenPort)
 	if err != nil {
 		kingpin.Fatalf("%v", err)
 	}
@@ -68,11 +68,16 @@ func main() {
 	switch cmd {
 	case institutionSetup.FullCommand():
 	case listInstitutions.FullCommand():
+		err = pq.ListInstitutions()
 	case listAccounts.FullCommand():
 	case configureAccount.FullCommand():
 	case downloadTransactions.FullCommand():
 	default:
 		kingpin.Fatalf("Unknown command ")
+	}
+
+	if err != nil {
+		kingpin.Fatalf("%v", err)
 	}
 }
 
