@@ -11,7 +11,7 @@ import (
 // DirExists will create a directory at path (including parents where necessary) if it does not exist.
 // if path does exist and is not a directory, it will error.
 func DirExists(path, kind string) error {
-	err := isExistingDir(path)
+	err := IsExistingDir(path)
 	if err == nil {
 		return nil
 	}
@@ -27,7 +27,7 @@ func DirExists(path, kind string) error {
 	return nil
 }
 
-func isExistingDir(path string) error {
+func IsExistingDir(path string) error {
 	s, err := os.Stat(path)
 	if err != nil {
 		return fmt.Errorf("failed to stat '%s': %w", path, err)
