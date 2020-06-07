@@ -3,76 +3,46 @@ package internal
 import (
 	"fmt"
 	"os"
-	"path/filepath"
-	"sort"
 	"text/tabwriter"
 	"time"
+
+	"github.com/chill/plaidqif/internal/institutions"
 )
 
-type Institutions map[string]Institution
-
-type Institution struct {
-	AccessToken    string
-	ItemID         string
-	Accounts       Accounts   `json:",omitempty"`
-	ConsentExpires *time.Time `json:",omitempty"`
-}
-
 func (p *PlaidQIF) ListInstitutions() error {
-	institutions, err := readInstitutions(p.confDir)
-	if err != nil {
-		return err
-	}
-
-	type named struct {
-		Name string
-		Institution
-	}
-
-	ordered := make([]named, 0, len(institutions))
-	for name, ins := range institutions {
-		ordered = append(ordered, named{
-			Name:        name,
-			Institution: ins,
-		})
-	}
-
-	sort.Slice(ordered, func(i, j int) bool {
-		return ordered[i].Name < ordered[j].Name
-	})
+	institutions := p.institutions.List()
 
 	tw := tabwriter.NewWriter(os.Stdout, 0, 8, 2, '\t', 0)
 	defer tw.Flush()
 
-	fmt.Fprintln(tw, "Institutions:")
-	fmt.Fprintln(tw, "Name\tPlaid Access Token\tPlaid Item ID\t")
-	fmt.Fprintln(tw, "----\t------------------\t-------------\t")
+	fmt.Fprintln(tw, "Configured Institutions:")
+	fmt.Fprintln(tw, "Name\tPlaid Access Token\tPlaid Item ID\tConsent Expires\t")
+	fmt.Fprintln(tw, "----\t------------------\t-------------\t---------------\t")
 
-	for _, ins := range ordered {
-		fmt.Fprintln(tw, fmt.Sprintf("%s\t%s\t%s\t", ins.Name, ins.AccessToken, ins.ItemID))
+	for _, ins := range institutions {
+		if err := p.printInstitutionDetails(tw, ins); err != nil {
+			return err
+		}
 	}
 
 	return nil
 }
 
-func institutionsPath(dir string) string {
-	const filename = "institutions.json"
-	return filepath.Join(dir, filename)
-}
-
-func readInstitutions(confDir string) (Institutions, error) {
-	var institutions Institutions
-	if err := unmarshalFile(institutionsPath(confDir), "institutions", &institutions); err != nil {
-		return nil, err
+func (p *PlaidQIF) printInstitutionDetails(tw *tabwriter.Writer, ins institutions.Institution) error {
+	resp, err := p.client.GetItem(ins.AccessToken)
+	if err != nil {
+		return fmt.Errorf("unable to get institution details from plaid for institution '%s': %w",
+			ins.Name, err)
 	}
 
-	return institutions, nil
-}
-
-func writeInstitutions(confDir string, institutions Institutions) error {
-	if err := confdirExists(confDir); err != nil {
-		return err
+	ins, err = p.institutions.UpdateConsentExpiry(ins.Name, resp.Item.ConsentExpirationTime)
+	if err != nil {
+		// this should never happen since we already got the institution above
+		panic(fmt.Errorf("failed to update consent expiry for existing institution '%s': %w", ins.Name, err))
 	}
 
-	return marshalFile(institutionsPath(confDir), "institutions", institutions)
+	// could also add the last transaction update time? fine for now
+	fmt.Fprintln(tw, fmt.Sprintf("%s\t%s\t%s\t%s\t",
+		ins.Name, ins.AccessToken, ins.ItemID, ins.ConsentExpires.Format(time.RFC822)))
+	return nil
 }

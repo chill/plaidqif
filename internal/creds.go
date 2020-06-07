@@ -4,6 +4,8 @@ import (
 	"fmt"
 	"path/filepath"
 	"strings"
+
+	"github.com/chill/plaidqif/internal/files"
 )
 
 type Credentials struct {
@@ -13,11 +15,11 @@ type Credentials struct {
 }
 
 func WriteCredentials(confDir string, creds Credentials) error {
-	if err := confdirExists(confDir); err != nil {
+	if err := files.DirExists(confDir, "confdir"); err != nil {
 		return err
 	}
 
-	return marshalFile(credPath(confDir), "credential", creds)
+	return files.MarshalFile(credPath(confDir), "credential", creds)
 }
 
 func credPath(dir string) string {
@@ -28,7 +30,7 @@ func credPath(dir string) string {
 func readCreds(confDir string) (Credentials, error) {
 	path := credPath(confDir)
 	var creds Credentials
-	if err := unmarshalFile(path, "credential", &creds); err != nil {
+	if err := files.Unmarshal(path, "credential", &creds); err != nil {
 		return Credentials{}, err
 	}
 

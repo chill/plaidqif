@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/chill/plaidqif/internal"
+	"github.com/chill/plaidqif/internal/files"
 	"gopkg.in/alecthomas/kingpin.v2"
 )
 
@@ -13,7 +14,7 @@ import (
 
 var (
 	root        = kingpin.New("plaidqif", "Downloads transactions from financial institutions using Plaid, and converts them to QIF files")
-	configDir   = root.Flag("confdir", "Directory where plaintext plaidqif configuration is stored").Default(filepath.Join(mustHomeDir(), ".plaidqif")).PlaceHolder("$HOME/.plaidqif").String()
+	configDir   = root.Flag("confdir", "Directory where plaintext plaidqif configuration is stored").Default(filepath.Join(files.MustHomeDir(), ".plaidqif")).PlaceHolder("$HOME/.plaidqif").String()
 	plaidEnv    = root.Flag("environment", "Plaid environment to connect to").Default("development").String()
 	clientName  = root.Flag("client", "Name of your client to connect to Plaid with").Default("plaidqif").String()
 	countryCode = root.Flag("countrycode", "Plaid countryCode to connect with").Default("GB").String()
@@ -32,16 +33,11 @@ var (
 	listAccounts            = root.Command("list-accounts", "List accounts from an institution")
 	listAccountInstitutions = listAccounts.Arg("institutions", "Institution to list accounts from").Required().Strings()
 
-	configureAccount   = root.Command("configure-account", "Configure an account with a friendly name and account type")
-	accountName        = configureAccount.Arg("name", "Your friendly name for the account, also used as !Account header in QIF").Required().String()
-	accountInstitution = configureAccount.Arg("institution", "Institution account is with").Required().String()
-	accountID          = configureAccount.Arg("id", "Plaid Account ID, can be determined using plaidqif list-accounts").Required().String()
-
 	downloadTransactions = root.Command("download", "Download transactions into QIFs")
-	downloadTo           = downloadTransactions.Flag("until", "Date to download transactions up to, inclusive, any Go-supported date format").Default(time.Now().Format(internal.DateFormat)).String()
-	downloadOutDir       = downloadTransactions.Flag("outdir", "Directory to write QIFs into, defaults to current working dir").Default(mustWorkingDir()).ExistingDir()
-	downloadFrom         = downloadTransactions.Arg("from", "Date to download transactions from, inclusive, any Go-supported date format").Required().String()
-	downloadAccounts     = downloadTransactions.Arg("accounts", "Account(s) to download, by their friendly name you configured, defaults to all accounts").Strings()
+	downloadUntil        = downloadTransactions.Flag("until", "Date to download transactions up to, inclusive, DD/MM/YYYY").Default(time.Now().Format(internal.DateFormat)).String()
+	downloadOutDir       = downloadTransactions.Flag("outdir", "Directory to write QIFs into, defaults to current working dir").Default(files.MustWorkingDir()).ExistingDir()
+	downloadFrom         = downloadTransactions.Arg("from", "Date to download transactions from, inclusive, DD/MM/YYYY").Required().String()
+	downloadInstitutions = downloadTransactions.Arg("institutions", "Institution(s) to download transactions from, for your configured accounts").Strings()
 )
 
 func main() {
@@ -70,31 +66,19 @@ func main() {
 		err = pq.ListInstitutions()
 	case listAccounts.FullCommand():
 		err = pq.ListAccounts(*listAccountInstitutions)
-	case configureAccount.FullCommand():
-		err = pq.ConfigureAccount(*accountName, *accountInstitution, *accountID)
 	case downloadTransactions.FullCommand():
+		err = pq.DownloadTransactions(*downloadInstitutions, *downloadFrom, *downloadUntil, *downloadOutDir)
 	default:
 		kingpin.Fatalf("Unknown command ")
+	}
+
+	// if we haven't errored out yet, close pq, so that institutions get written to disk, updating err
+	// we don't defer the close, because we don't want to write the file if something goes wrong
+	if err == nil {
+		err = pq.Close()
 	}
 
 	if err != nil {
 		kingpin.Fatalf("%v", err)
 	}
-}
-
-func mustHomeDir() string {
-	return mustDir(os.UserHomeDir, "home")
-}
-
-func mustWorkingDir() string {
-	return mustDir(os.Getwd, "working")
-}
-
-func mustDir(fn func() (string, error), kind string) string {
-	dir, err := fn()
-	if err != nil {
-		kingpin.Fatalf("could not determine %s directory: %v", kind, err)
-	}
-
-	return dir
 }
