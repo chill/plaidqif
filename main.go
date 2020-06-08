@@ -27,8 +27,7 @@ var (
 	publicKey  = setupCreds.Arg("publickey", "Plaid public_key from the dashboard").Required().String()
 	secret     = setupCreds.Arg("secret", "Plaid secret from the dashboard").Required().String()
 
-	institutionSetup = root.Command("setup-ins", "Set up a new institution for plaidqif")
-	institutionName  = institutionSetup.Arg("name", "Your friendly name for the institution to set up").Required().String()
+	institutionSetup = root.Command("setup-ins", "Set up institutions")
 
 	listInstitutions = root.Command("list-ins", "List institutions")
 
@@ -64,6 +63,7 @@ func main() {
 
 	switch cmd {
 	case institutionSetup.FullCommand():
+		err = pq.LinkInstitution()
 	case listInstitutions.FullCommand():
 		err = pq.ListInstitutions()
 	case listAccounts.FullCommand():

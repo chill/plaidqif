@@ -15,6 +15,8 @@ type PlaidQIF struct {
 	institutions *institutions.InstitutionManager
 	client       *plaid.Client
 	plaidCountry string
+	plaidEnv     string
+	publicKey    string
 	clientName   string
 	listenAddr   string
 	dateFormat   string
@@ -65,6 +67,8 @@ func PlaidQif(confDir, plaidEnv, country, clientName, dateFormat string, listenP
 		institutions: institutionMgr,
 		client:       client,
 		plaidCountry: country,
+		plaidEnv:     plaidEnv,
+		publicKey:    creds.PublicKey,
 		clientName:   clientName,
 		listenAddr:   listenAddr,
 		dateFormat:   dateFormat,

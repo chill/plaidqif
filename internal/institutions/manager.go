@@ -3,9 +3,11 @@ package institutions
 import (
 	"errors"
 	"fmt"
+	"math/rand"
 	"os"
 	"path/filepath"
 	"sort"
+	"strconv"
 	"time"
 
 	"github.com/chill/plaidqif/internal/files"
@@ -52,6 +54,23 @@ func (m *InstitutionManager) GetInstitution(name string) (Institution, error) {
 	}
 
 	return ins, nil
+}
+
+func (m *InstitutionManager) AddInstitution(ins Institution) error {
+	var err error
+	if _, ok := m.institutions[ins.Name]; ok {
+		var newName string
+		for ok {
+			newName := fmt.Sprintf("%s_%s", ins.Name, strconv.Itoa(rand.Int()))
+			_, ok = m.institutions[newName]
+		}
+
+		err = fmt.Errorf("institution '%s' already exists, adding as '%s'", ins.Name, newName)
+		ins.Name = newName
+	}
+
+	m.institutions[ins.Name] = ins
+	return err
 }
 
 func (m *InstitutionManager) List() []Institution {
