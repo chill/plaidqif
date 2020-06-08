@@ -6,17 +6,23 @@ import (
 	"text/tabwriter"
 	"time"
 
-	"github.com/chill/plaidqif/internal/institutions"
 	"github.com/plaid/plaid-go/plaid"
+
+	"github.com/chill/plaidqif/internal/institutions"
 )
 
-func (p *PlaidQIF) ListAccounts(institutions []string) error {
+func (p *PlaidQIF) ListAccounts(names []string) error {
 	tw := tabwriter.NewWriter(os.Stdout, 0, 8, 2, '\t', 0)
 	defer tw.Flush()
 
 	fmt.Fprintln(tw, "Accounts:")
 	fmt.Fprintln(tw, "Institution\tName\tPlaid Type\tQIF Type\tPlaid Account ID\tConsent Expires\t")
 	fmt.Fprintln(tw, "-----------\t----\t----------\t--------\t----------------\t---------------\t")
+
+	institutions, err := p.institutions.GetInstitutions(names)
+	if err != nil {
+		return err
+	}
 
 	for _, ins := range institutions {
 		if err := p.listInstitutionAccounts(tw, ins); err != nil {
@@ -27,12 +33,7 @@ func (p *PlaidQIF) ListAccounts(institutions []string) error {
 	return nil
 }
 
-func (p *PlaidQIF) listInstitutionAccounts(tw *tabwriter.Writer, insName string) error {
-	ins, err := p.institutions.GetInstitution(insName)
-	if err != nil {
-		return err
-	}
-
+func (p *PlaidQIF) listInstitutionAccounts(tw *tabwriter.Writer, ins institutions.Institution) error {
 	ins, accounts, err := p.getInstitutionAccounts(ins)
 	if err != nil {
 		return err

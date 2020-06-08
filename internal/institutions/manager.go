@@ -87,3 +87,23 @@ func (m *InstitutionManager) UpdateConsentExpiry(name string, newExpiry time.Tim
 func (m *InstitutionManager) WriteInstitutions() error {
 	return files.MarshalFile(m.path, "institutions", m.institutions)
 }
+
+// GetInstitutions returns all institutions if len(names) == 0
+func (m *InstitutionManager) GetInstitutions(names []string) ([]Institution, error) {
+	is := make([]Institution, 0, len(names))
+
+	for _, name := range names {
+		ins, err := m.GetInstitution(name)
+		if err != nil {
+			return nil, err
+		}
+
+		is = append(is, ins)
+	}
+
+	if len(is) == 0 {
+		is = m.List()
+	}
+
+	return is, nil
+}

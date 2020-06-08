@@ -5,9 +5,10 @@ import (
 	"net"
 	"strconv"
 
+	"github.com/plaid/plaid-go/plaid"
+
 	"github.com/chill/plaidqif/internal/files"
 	"github.com/chill/plaidqif/internal/institutions"
-	"github.com/plaid/plaid-go/plaid"
 )
 
 type PlaidQIF struct {
@@ -16,9 +17,8 @@ type PlaidQIF struct {
 	plaidCountry string
 	clientName   string
 	listenAddr   string
+	dateFormat   string
 }
-
-const DateFormat = "02/01/2006"
 
 var validPlaidEnvs = map[string]plaid.Environment{
 	"sandbox":     plaid.Sandbox,
@@ -26,7 +26,7 @@ var validPlaidEnvs = map[string]plaid.Environment{
 	"production":  plaid.Production,
 }
 
-func PlaidQif(confDir, plaidEnv, country, clientName string, listenPort int) (*PlaidQIF, error) {
+func PlaidQif(confDir, plaidEnv, country, clientName, dateFormat string, listenPort int) (*PlaidQIF, error) {
 	if err := files.DirExists(confDir, "confdir"); err != nil {
 		return nil, err
 	}
@@ -67,6 +67,7 @@ func PlaidQif(confDir, plaidEnv, country, clientName string, listenPort int) (*P
 		plaidCountry: country,
 		clientName:   clientName,
 		listenAddr:   listenAddr,
+		dateFormat:   dateFormat,
 	}, nil
 }
 

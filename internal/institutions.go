@@ -16,7 +16,7 @@ func (p *PlaidQIF) ListInstitutions() error {
 	defer tw.Flush()
 
 	fmt.Fprintln(tw, "Configured Institutions:")
-	fmt.Fprintln(tw, "Name\tPlaid Access Token\tPlaid Item ID\tConsent Expires\t")
+	fmt.Fprintln(tw, "Payee\tPlaid Access Token\tPlaid Item ID\tConsent Expires\t")
 	fmt.Fprintln(tw, "----\t------------------\t-------------\t---------------\t")
 
 	for _, ins := range institutions {

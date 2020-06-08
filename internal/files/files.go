@@ -55,9 +55,9 @@ func Unmarshal(path, kind string, v interface{}) error {
 }
 
 func MarshalFile(path, kind string, v interface{}) error {
-	f, err := os.OpenFile(path, os.O_RDWR|os.O_CREATE|os.O_TRUNC, 0600)
+	f, err := OpenWriter(path, kind)
 	if err != nil {
-		return fmt.Errorf("failed to open %s file '%s' for writing: %w", kind, path, err)
+		return err
 	}
 	defer f.Close()
 
@@ -68,7 +68,20 @@ func MarshalFile(path, kind string, v interface{}) error {
 		return fmt.Errorf("failed to marshal %s file '%s': %w", kind, path, err)
 	}
 
+	if err := f.Close(); err != nil {
+		return fmt.Errorf("failed to close %s file '%s': %w", kind, path, err)
+	}
+
 	return nil
+}
+
+func OpenWriter(path, kind string) (*os.File, error) {
+	f, err := os.OpenFile(path, os.O_RDWR|os.O_CREATE|os.O_TRUNC, 0600)
+	if err != nil {
+		return nil, fmt.Errorf("failed to open %s file '%s' for writing: %w", kind, path, err)
+	}
+
+	return f, nil
 }
 
 func MustHomeDir() string {
