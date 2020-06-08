@@ -72,17 +72,23 @@ type linkFields struct {
 }
 
 func (p *PlaidQIF) LinkInstitution() error {
-	const callbackPath = "/linkCallback"
+	const (
+		linkPath     = "/link"
+		callbackPath = "/linkCallback"
+	)
+
 	callbackURL := path.Join(p.listenAddr, callbackPath)
 
 	errs := make(chan error)
 	mux := http.NewServeMux()
-	mux.HandleFunc("/link", p.linkHandler(callbackURL, errs))
+	mux.HandleFunc(linkPath, p.linkHandler(callbackURL, errs))
 	mux.HandleFunc(callbackPath, p.linkCallbackHandler(errs))
 
 	if err := http.ListenAndServe(p.listenAddr, mux); err != nil {
 		return fmt.Errorf("failed to start server: %w", err)
 	}
+
+	fmt.Printf("Open %s in a web browser to link an institution\n", path.Join(p.listenAddr, linkPath))
 
 	return <-errs
 }
