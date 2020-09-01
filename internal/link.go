@@ -79,9 +79,9 @@ func (p *PlaidQIF) LinkInstitution() error {
 	mux.HandleFunc(linkPath, p.linkHandler(callbackURL, errs))
 	mux.HandleFunc(callbackPath, p.linkCallbackHandler(errs))
 
-	if err := http.ListenAndServe(p.listenAddr, mux); err != nil {
-		return fmt.Errorf("failed to start server: %w", err)
-	}
+	server := &http.Server{Addr: p.listenAddr, Handler: mux}
+	go server.ListenAndServe()
+	defer server.Close()
 
 	fmt.Printf("Open %s in a web browser to link an institution\n", path.Join(p.listenAddr, linkPath))
 

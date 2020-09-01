@@ -91,9 +91,9 @@ func (p *PlaidQIF) UpdateInstitution(insName string) error {
 	mux.HandleFunc(updatePath, updateHandler)
 	mux.HandleFunc(callbackPath, p.updateCallbackHandler(ins, errs))
 
-	if err := http.ListenAndServe(p.listenAddr, mux); err != nil {
-		return fmt.Errorf("failed to start server: %w", err)
-	}
+	server := &http.Server{Addr: p.listenAddr, Handler: mux}
+	go server.ListenAndServe()
+	defer server.Close()
 
 	fmt.Printf("Open %s in a web browser to update %s\n", path.Join(p.listenAddr, updatePath), insName)
 
