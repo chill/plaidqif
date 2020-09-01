@@ -12,6 +12,7 @@ plaidqif setup-ins // repeat for as many institutions you need
 plaidqif list-ins // see the institutions you configured
 plaidqif list-accounts // see all available accounts for your institutions
 plaidqif download <DD/MM/YYYY> // download transactions since the date provided for all accounts
+plaidqif update-ins <institution-name> // update consent for an institution you previously configured
 ```
 
 The link flow is not yet fully tested... at the time of writing I was having issues
