@@ -61,7 +61,9 @@ func (p *PlaidQIF) downloadInstitutionTransactions(ins institutions.Institution,
 		return err
 	}
 
-	if ins.ConsentExpires.Before(time.Now().Add(10 * time.Minute)) {
+	if ins.ConsentExpires.Before(time.Now()) {
+		return fmt.Errorf("institution '%s' consent expired at: %s", ins.Name, ins.ConsentExpires.Format(time.RFC822))
+	} else if ins.ConsentExpires.Before(time.Now().Add(10 * time.Minute)) {
 		return fmt.Errorf("institution '%s' consent expires within 10 minutes: %s", ins.Name, ins.ConsentExpires.Format(time.RFC822))
 	} else if ins.ConsentExpires.Before(time.Now().Add(24 * time.Hour)) {
 		fmt.Printf("Institution '%s' consent expires within 1 day: %s\n", ins.Name, ins.ConsentExpires.Format(time.RFC822))

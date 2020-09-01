@@ -7,14 +7,14 @@ import (
 	"net/http"
 	"path"
 	"text/template"
+	"time"
 
 	"github.com/chill/plaidqif/internal/institutions"
 )
 
-const linkTempl = `<html>
+const updateTempl = `<html>
     <body>
-        <input type="text" name="uinsname" id="uinsname" placeholder="Your institution name">
-        <button id='linkButton'>Plaid Link: Institution Select</button>
+        <button id='linkButton'>Plaid Link Update: {{.Institution}}</button>
         <script src="https://cdn.plaid.com/link/v2/stable/link-initialize.js"></script>
         <script>
             var linkHandler = Plaid.create({
@@ -24,15 +24,19 @@ const linkTempl = `<html>
                 key: '{{.PublicKey}}',
                 product: 'transactions',
                 apiVersion: 'v2',
+                // update mode
+                // from https://plaid.com/docs/maintain-legacy-integration/#updating-items-via-link: POST /item/public_token/create, client_id and secret from dashboard, access token from institution
+                token: '{{.PublicToken}}',
                 onSuccess: function(publicToken, metadata) {
-                    let insName = document.getElementById('uinsname').value
+                    let insName = "{{.Institution}}";
 
                     let req = new XMLHttpRequest();
                     let callbackURL = "{{.CallbackURL}}";
                     req.open("POST", callbackURL);
                     req.setRequestHeader("Content-Type", "application/json;charset=UTF-8");
 
-                    req.send(JSON.stringify({"publicToken": publicToken, "institutionName": insName, "metadata": JSON.stringify(metadata)}));
+                    console.log('metadata: ' + JSON.stringify(metadata))
+                    req.send(JSON.stringify({"institutionName": insName}));
                 },
                 onExit: function(err, metadata) {
                     if (err === null) {
@@ -45,76 +49,89 @@ const linkTempl = `<html>
             });
 
             document.getElementById('linkButton').onclick = function() {
-                if (document.getElementById('uinsname').value === "") {
-                    window.alert("Provide a friendly name for the institution you are about to link")
-                    return
-                }
                 linkHandler.open();
             };
         </script>
     </body>
 </html>`
 
-var linkTemplate = template.Must(template.New("link").Parse(linkTempl))
+var updateTemplate = template.Must(template.New("update").Parse(updateTempl))
 
-type linkFields struct {
+type updateFields struct {
 	Environment string
 	ClientName  string
 	Country     string
 	PublicKey   string
+	PublicToken string
+	Institution string
 	CallbackURL string
 }
 
 // TODO update to use link tokens: https://plaid.com/docs/upgrade-to-link-tokens/
-func (p *PlaidQIF) LinkInstitution() error {
+func (p *PlaidQIF) UpdateInstitution(insName string) error {
 	const (
-		linkPath     = "/link"
-		callbackPath = "/linkCallback"
+		updatePath   = "/update"
+		callbackPath = "/updateCallback"
 	)
 
-	callbackURL := path.Join(p.listenAddr, callbackPath)
+	ins, err := p.institutions.GetInstitution(insName)
+	if err != nil {
+		return err
+	}
 
+	callbackURL := path.Join(p.listenAddr, callbackPath)
 	errs := make(chan error)
+
+	updateHandler, err := p.updateHandler(ins, callbackURL, errs)
+	if err != nil {
+		return err
+	}
+
 	mux := http.NewServeMux()
-	mux.HandleFunc(linkPath, p.linkHandler(callbackURL, errs))
-	mux.HandleFunc(callbackPath, p.linkCallbackHandler(errs))
+	mux.HandleFunc(updatePath, updateHandler)
+	mux.HandleFunc(callbackPath, p.updateCallbackHandler(ins, errs))
 
 	if err := http.ListenAndServe(p.listenAddr, mux); err != nil {
 		return fmt.Errorf("failed to start server: %w", err)
 	}
 
-	fmt.Printf("Open %s in a web browser to link an institution\n", path.Join(p.listenAddr, linkPath))
+	fmt.Printf("Open %s in a web browser to update %s\n", path.Join(p.listenAddr, updatePath), insName)
 
 	return <-errs
 }
 
-func (p *PlaidQIF) linkHandler(callbackURL string, errChan chan<- error) http.HandlerFunc {
-	lf := linkFields{
+func (p *PlaidQIF) updateHandler(ins institutions.Institution, callbackURL string, errChan chan<- error) (http.HandlerFunc, error) {
+	resp, err := p.client.CreatePublicToken(ins.AccessToken)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get public token for update link flow: %w", err)
+	}
+
+	lf := updateFields{
 		Environment: p.plaidEnv,
 		ClientName:  p.clientName,
 		Country:     p.plaidCountry,
 		PublicKey:   p.publicKey,
+		PublicToken: resp.PublicToken,
+		Institution: ins.Name,
 		CallbackURL: callbackURL,
 	}
 
 	return func(rw http.ResponseWriter, _ *http.Request) {
-		if err := linkTemplate.Execute(rw, lf); err != nil {
+		if err := updateTemplate.Execute(rw, lf); err != nil {
 			errChan <- fmt.Errorf("error writing link page: %w", err)
 			close(errChan)
 			return
 		}
 
 		// don't close here, await callback in the other handler
-	}
+	}, nil
 }
 
-type linkCallback struct {
-	PublicToken     string
+type updateCallback struct {
 	InstitutionName string
-	Metadata        json.RawMessage
 }
 
-func (p *PlaidQIF) linkCallbackHandler(errChan chan<- error) http.HandlerFunc {
+func (p *PlaidQIF) updateCallbackHandler(ins institutions.Institution, errChan chan<- error) http.HandlerFunc {
 	return func(rw http.ResponseWriter, req *http.Request) {
 		bs, err := ioutil.ReadAll(req.Body)
 		if err != nil {
@@ -124,7 +141,7 @@ func (p *PlaidQIF) linkCallbackHandler(errChan chan<- error) http.HandlerFunc {
 			return
 		}
 
-		var callbackReq linkCallback
+		var callbackReq updateCallback
 		if err := json.Unmarshal(bs, &callbackReq); err != nil {
 			rw.WriteHeader(http.StatusBadRequest)
 			errChan <- fmt.Errorf("unable to unmarshal callback body: %w", err)
@@ -132,15 +149,17 @@ func (p *PlaidQIF) linkCallbackHandler(errChan chan<- error) http.HandlerFunc {
 			return
 		}
 
-		tokResp, err := p.client.ExchangePublicToken(callbackReq.PublicToken)
-		if err != nil {
-			rw.WriteHeader(http.StatusInternalServerError)
-			errChan <- fmt.Errorf("error exchanging public token with plaid: %w", err)
+		if callbackReq.InstitutionName != ins.Name {
+			rw.WriteHeader(http.StatusBadRequest)
+			errChan <- fmt.Errorf("received institution name '%s' but expected '%s'",
+				callbackReq.InstitutionName, ins.Name)
 			close(errChan)
 			return
 		}
 
-		itemResp, err := p.client.GetItem(tokResp.AccessToken)
+		// we don't have to rotate the access token, we just need the updated consent expiry
+
+		itemResp, err := p.client.GetItem(ins.AccessToken)
 		if err != nil {
 			rw.WriteHeader(http.StatusInternalServerError)
 			errChan <- fmt.Errorf("error looking up item with plaid using access token: %w", err)
@@ -148,21 +167,16 @@ func (p *PlaidQIF) linkCallbackHandler(errChan chan<- error) http.HandlerFunc {
 			return
 		}
 
-		institution := institutions.Institution{
-			Name:           callbackReq.InstitutionName,
-			AccessToken:    tokResp.AccessToken,
-			ItemID:         tokResp.ItemID,
-			ConsentExpires: &itemResp.Item.ConsentExpirationTime,
-		}
-
-		if err := p.institutions.AddInstitution(institution); err != nil {
-			rw.WriteHeader(http.StatusBadRequest)
-			fmt.Printf("%s\n", err)
-			// only error here is name already exists, but we randomise and write anyway, so don't return it
+		ins, err = p.institutions.UpdateConsentExpiry(ins.Name, itemResp.Item.ConsentExpirationTime)
+		if err != nil {
+			rw.WriteHeader(http.StatusInternalServerError)
+			errChan <- fmt.Errorf("error updating instutiton '%s' consent expiry to %s: %w",
+				ins.Name, itemResp.Item.ConsentExpirationTime.Format(time.RFC822), err)
 			close(errChan)
 			return
 		}
 
+		fmt.Printf("updated instutiton '%s' consent expiry to %s\n", ins.Name, itemResp.Item.ConsentExpirationTime.Format(time.RFC822))
 		close(errChan)
 		rw.WriteHeader(http.StatusOK)
 	}

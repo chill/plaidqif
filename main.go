@@ -29,6 +29,9 @@ var (
 
 	institutionSetup = root.Command("setup-ins", "Set up institutions")
 
+	updateInstitution     = root.Command("update-ins", "Update an institution's consent")
+	updateInstitutionName = updateInstitution.Arg("institution", "Institution to update").Required().String()
+
 	listInstitutions = root.Command("list-ins", "List institutions")
 
 	listAccounts            = root.Command("list-accounts", "List accounts from an institution")
@@ -64,6 +67,8 @@ func main() {
 	switch cmd {
 	case institutionSetup.FullCommand():
 		err = pq.LinkInstitution()
+	case updateInstitution.FullCommand():
+		err = pq.UpdateInstitution(*updateInstitutionName)
 	case listInstitutions.FullCommand():
 		err = pq.ListInstitutions()
 	case listAccounts.FullCommand():
