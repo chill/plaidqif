@@ -28,7 +28,7 @@ var validPlaidEnvs = map[string]plaid.Environment{
 	"production":  plaid.Production,
 }
 
-func PlaidQif(confDir, plaidEnv, country, clientName, dateFormat string, listenPort int) (*PlaidQIF, error) {
+func PlaidQif(confDir, plaidEnv, clientName, country, dateFormat string, listenPort int) (*PlaidQIF, error) {
 	if err := files.DirExists(confDir, "confdir"); err != nil {
 		return nil, err
 	}
