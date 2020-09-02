@@ -31,8 +31,8 @@ const updateTempl = `<html>
                     let insName = "{{.Institution}}";
 
                     let req = new XMLHttpRequest();
-                    let callbackURL = "{{.CallbackURL}}";
-                    req.open("POST", callbackURL);
+                    let callbackPath = "{{.CallbackPath}}";
+                    req.open("POST", callbackPath);
                     req.setRequestHeader("Content-Type", "application/json;charset=UTF-8");
 
                     console.log('metadata: ' + JSON.stringify(metadata))
@@ -58,13 +58,13 @@ const updateTempl = `<html>
 var updateTemplate = template.Must(template.New("update").Parse(updateTempl))
 
 type updateFields struct {
-	Environment string
-	ClientName  string
-	Country     string
-	PublicKey   string
-	PublicToken string
-	Institution string
-	CallbackURL string
+	Environment  string
+	ClientName   string
+	Country      string
+	PublicKey    string
+	PublicToken  string
+	Institution  string
+	CallbackPath string
 }
 
 // TODO update to use link tokens: https://plaid.com/docs/upgrade-to-link-tokens/
@@ -79,10 +79,8 @@ func (p *PlaidQIF) UpdateInstitution(insName string) error {
 		return err
 	}
 
-	callbackURL := path.Join(p.listenAddr, callbackPath)
 	errs := make(chan error)
-
-	updateHandler, err := p.updateHandler(ins, callbackURL, errs)
+	updateHandler, err := p.updateHandler(ins, callbackPath, errs)
 	if err != nil {
 		return err
 	}
@@ -100,20 +98,20 @@ func (p *PlaidQIF) UpdateInstitution(insName string) error {
 	return <-errs
 }
 
-func (p *PlaidQIF) updateHandler(ins institutions.Institution, callbackURL string, errChan chan<- error) (http.HandlerFunc, error) {
+func (p *PlaidQIF) updateHandler(ins institutions.Institution, callbackPath string, errChan chan<- error) (http.HandlerFunc, error) {
 	resp, err := p.client.CreatePublicToken(ins.AccessToken)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get public token for update link flow: %w", err)
 	}
 
 	lf := updateFields{
-		Environment: p.plaidEnv,
-		ClientName:  p.clientName,
-		Country:     p.plaidCountry,
-		PublicKey:   p.publicKey,
-		PublicToken: resp.PublicToken,
-		Institution: ins.Name,
-		CallbackURL: callbackURL,
+		Environment:  p.plaidEnv,
+		ClientName:   p.clientName,
+		Country:      p.plaidCountry,
+		PublicKey:    p.publicKey,
+		PublicToken:  resp.PublicToken,
+		Institution:  ins.Name,
+		CallbackPath: callbackPath,
 	}
 
 	return func(rw http.ResponseWriter, _ *http.Request) {

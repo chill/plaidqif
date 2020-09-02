@@ -28,8 +28,8 @@ const linkTempl = `<html>
                     let insName = document.getElementById('uinsname').value
 
                     let req = new XMLHttpRequest();
-                    let callbackURL = "{{.CallbackURL}}";
-                    req.open("POST", callbackURL);
+                    let callbackPath = "{{.CallbackPath}}";
+                    req.open("POST", callbackPath);
                     req.setRequestHeader("Content-Type", "application/json;charset=UTF-8");
 
                     req.send(JSON.stringify({"publicToken": publicToken, "institutionName": insName, "metadata": JSON.stringify(metadata)}));
@@ -58,11 +58,11 @@ const linkTempl = `<html>
 var linkTemplate = template.Must(template.New("link").Parse(linkTempl))
 
 type linkFields struct {
-	Environment string
-	ClientName  string
-	Country     string
-	PublicKey   string
-	CallbackURL string
+	Environment  string
+	ClientName   string
+	Country      string
+	PublicKey    string
+	CallbackPath string
 }
 
 // TODO update to use link tokens: https://plaid.com/docs/upgrade-to-link-tokens/
@@ -72,11 +72,9 @@ func (p *PlaidQIF) LinkInstitution() error {
 		callbackPath = "/linkCallback"
 	)
 
-	callbackURL := path.Join(p.listenAddr, callbackPath)
-
 	errs := make(chan error)
 	mux := http.NewServeMux()
-	mux.HandleFunc(linkPath, p.linkHandler(callbackURL, errs))
+	mux.HandleFunc(linkPath, p.linkHandler(callbackPath, errs))
 	mux.HandleFunc(callbackPath, p.linkCallbackHandler(errs))
 
 	server := &http.Server{Addr: p.listenAddr, Handler: mux}
@@ -88,13 +86,13 @@ func (p *PlaidQIF) LinkInstitution() error {
 	return <-errs
 }
 
-func (p *PlaidQIF) linkHandler(callbackURL string, errChan chan<- error) http.HandlerFunc {
+func (p *PlaidQIF) linkHandler(callbackPath string, errChan chan<- error) http.HandlerFunc {
 	lf := linkFields{
-		Environment: p.plaidEnv,
-		ClientName:  p.clientName,
-		Country:     p.plaidCountry,
-		PublicKey:   p.publicKey,
-		CallbackURL: callbackURL,
+		Environment:  p.plaidEnv,
+		ClientName:   p.clientName,
+		Country:      p.plaidCountry,
+		PublicKey:    p.publicKey,
+		CallbackPath: callbackPath,
 	}
 
 	return func(rw http.ResponseWriter, _ *http.Request) {
