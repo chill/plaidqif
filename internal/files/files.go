@@ -4,8 +4,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
-
-	"gopkg.in/alecthomas/kingpin.v2"
 )
 
 // DirExists will create a directory at path (including parents where necessary) if it does not exist.
@@ -84,19 +82,3 @@ func OpenWriter(path, kind string) (*os.File, error) {
 	return f, nil
 }
 
-func MustHomeDir() string {
-	return mustDir(os.UserHomeDir, "home")
-}
-
-func MustWorkingDir() string {
-	return mustDir(os.Getwd, "working")
-}
-
-func mustDir(fn func() (string, error), kind string) string {
-	dir, err := fn()
-	if err != nil {
-		kingpin.Fatalf("could not determine %s directory: %v", kind, err)
-	}
-
-	return dir
-}

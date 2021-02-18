@@ -18,12 +18,7 @@ const linkTempl = `<html>
         <script src="https://cdn.plaid.com/link/v2/stable/link-initialize.js"></script>
         <script>
             var linkHandler = Plaid.create({
-                env: '{{.Environment}}',
-                clientName: '{{.ClientName}}',
-                countryCodes: ['{{.Country}}'],
-                key: '{{.PublicKey}}',
-                product: 'transactions',
-                apiVersion: 'v2',
+                token: '{{.LinkToken}}',
                 onSuccess: function(publicToken, metadata) {
                     let insName = document.getElementById('uinsname').value
 
@@ -61,12 +56,16 @@ type linkFields struct {
 	Environment  string
 	ClientName   string
 	Country      string
-	PublicKey    string
 	CallbackPath string
+	LinkToken    string
 }
 
-// TODO update to use link tokens: https://plaid.com/docs/upgrade-to-link-tokens/
 func (p *PlaidQIF) LinkInstitution() error {
+	linkToken, err := p.getLinkToken()
+	if err != nil {
+		return err
+	}
+
 	const (
 		linkPath     = "/link"
 		callbackPath = "/linkCallback"
@@ -74,7 +73,7 @@ func (p *PlaidQIF) LinkInstitution() error {
 
 	errs := make(chan error)
 	mux := http.NewServeMux()
-	mux.HandleFunc(linkPath, p.linkHandler(callbackPath, errs))
+	mux.HandleFunc(linkPath, p.linkHandler(callbackPath, linkToken, errs))
 	mux.HandleFunc(callbackPath, p.linkCallbackHandler(errs))
 
 	server := &http.Server{Addr: p.listenAddr, Handler: mux}
@@ -86,13 +85,13 @@ func (p *PlaidQIF) LinkInstitution() error {
 	return <-errs
 }
 
-func (p *PlaidQIF) linkHandler(callbackPath string, errChan chan<- error) http.HandlerFunc {
+func (p *PlaidQIF) linkHandler(callbackPath, linkToken string, errChan chan<- error) http.HandlerFunc {
 	lf := linkFields{
 		Environment:  p.plaidEnv,
 		ClientName:   p.clientName,
 		Country:      p.plaidCountry,
-		PublicKey:    p.publicKey,
 		CallbackPath: callbackPath,
+		LinkToken:    linkToken,
 	}
 
 	return func(rw http.ResponseWriter, _ *http.Request) {

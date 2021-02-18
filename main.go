@@ -8,14 +8,14 @@ import (
 	"gopkg.in/alecthomas/kingpin.v2"
 
 	"github.com/chill/plaidqif/internal"
-	"github.com/chill/plaidqif/internal/files"
+	"github.com/chill/plaidqif/internal/osutil"
 )
 
 const defaultDateFmt = "02/01/2006"
 
 var (
 	root        = kingpin.New("plaidqif", "Downloads transactions from financial institutions using Plaid, and converts them to QIF files")
-	configDir   = root.Flag("confdir", "Directory where plaintext plaidqif configuration is stored").Default(filepath.Join(files.MustHomeDir(), ".plaidqif")).PlaceHolder("$HOME/.plaidqif").String()
+	configDir   = root.Flag("confdir", "Directory where plaintext plaidqif configuration is stored").Default(filepath.Join(osutil.MustHomeDir(), ".plaidqif")).PlaceHolder("$HOME/.plaidqif").String()
 	plaidEnv    = root.Flag("environment", "Plaid environment to connect to").Default("development").String()
 	clientName  = root.Flag("client", "Payee of your client to connect to Plaid with").Default("plaidqif").String()
 	countryCode = root.Flag("countrycode", "Plaid countryCode to connect with").Default("GB").String()
@@ -24,8 +24,8 @@ var (
 
 	setupCreds = root.Command("setup-creds", "Set Plaid credentials for plaidqif")
 	clientID   = setupCreds.Arg("clientid", "Plaid client_id from the dashboard").Required().String()
-	publicKey  = setupCreds.Arg("publickey", "Plaid public_key from the dashboard").Required().String()
 	secret     = setupCreds.Arg("secret", "Plaid secret from the dashboard").Required().String()
+	userID     = setupCreds.Arg("userid", "A user ID of your own choosing, sent in requests to Plaid and which will show up in the Plaid logs").Default(osutil.MustUsername()).String()
 
 	institutionSetup = root.Command("setup-ins", "Set up institutions")
 
@@ -39,7 +39,7 @@ var (
 
 	downloadTransactions = root.Command("download", "Download transactions into QIFs")
 	downloadUntil        = downloadTransactions.Flag("until", "Date to download transactions up to, inclusive, defaults to today").Default(time.Now().Format(defaultDateFmt)).String()
-	downloadOutDir       = downloadTransactions.Flag("outdir", "Directory to write QIFs into, defaults to current working dir").Default(files.MustWorkingDir()).PlaceHolder("<workdir>").ExistingDir()
+	downloadOutDir       = downloadTransactions.Flag("outdir", "Directory to write QIFs into, defaults to current working dir").Default(osutil.MustWorkingDir()).PlaceHolder("<workdir>").ExistingDir()
 	downloadFrom         = downloadTransactions.Arg("from", "Date to download transactions from, inclusive").Required().String()
 	downloadInstitutions = downloadTransactions.Arg("institutions", "Institution(s) to download transactions from, for your configured accounts, defaults to all").Strings()
 )
@@ -49,9 +49,8 @@ func main() {
 
 	if cmd == setupCreds.FullCommand() {
 		if err := internal.WriteCredentials(*configDir, internal.Credentials{
-			ClientID:  *clientID,
-			PublicKey: *publicKey,
-			Secret:    *secret,
+			ClientID: *clientID,
+			Secret:   *secret,
 		}); err != nil {
 			kingpin.Fatalf("%v", err)
 		}

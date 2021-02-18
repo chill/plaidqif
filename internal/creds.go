@@ -9,9 +9,9 @@ import (
 )
 
 type Credentials struct {
-	ClientID  string
-	PublicKey string
-	Secret    string
+	ClientID string
+	Secret   string
+	UserID   string
 }
 
 func WriteCredentials(confDir string, creds Credentials) error {
@@ -39,12 +39,12 @@ func readCreds(confDir string) (Credentials, error) {
 		missing = append(missing, "ClientID")
 	}
 
-	if creds.PublicKey == "" {
-		missing = append(missing, "PublicKey")
-	}
-
 	if creds.Secret == "" {
 		missing = append(missing, "Secret")
+	}
+
+	if creds.UserID == "" {
+		missing = append(missing, "UserID")
 	}
 
 	if len(missing) != 0 {

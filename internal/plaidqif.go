@@ -16,8 +16,8 @@ type PlaidQIF struct {
 	client       *plaid.Client
 	plaidCountry string
 	plaidEnv     string
-	publicKey    string
 	clientName   string
+	userID       string
 	listenAddr   string
 	dateFormat   string
 }
@@ -56,7 +56,6 @@ func PlaidQif(confDir, plaidEnv, clientName, country, dateFormat string, listenP
 	client, err := plaid.NewClient(plaid.ClientOptions{
 		ClientID:    creds.ClientID,
 		Secret:      creds.Secret,
-		PublicKey:   creds.PublicKey,
 		Environment: env,
 	})
 	if err != nil {
@@ -68,8 +67,8 @@ func PlaidQif(confDir, plaidEnv, clientName, country, dateFormat string, listenP
 		client:       client,
 		plaidCountry: country,
 		plaidEnv:     plaidEnv,
-		publicKey:    creds.PublicKey,
 		clientName:   clientName,
+		userID:       creds.UserID,
 		listenAddr:   listenAddr,
 		dateFormat:   dateFormat,
 	}, nil
@@ -78,4 +77,40 @@ func PlaidQif(confDir, plaidEnv, clientName, country, dateFormat string, listenP
 // Close writes any updates to institutions that took place during the execution of a command, to disk
 func (p *PlaidQIF) Close() error {
 	return p.institutions.WriteInstitutions()
+}
+
+// getLinkToken returns a link token for use in the link "setup" flow.
+func (p *PlaidQIF) getLinkToken() (string, error) {
+	return p.createLinkToken(plaid.LinkTokenConfigs{
+		User: &plaid.LinkTokenUser{
+			ClientUserID: p.userID,
+		},
+		ClientName:   p.clientName,
+		CountryCodes: []string{p.plaidCountry},
+		Language:     "en",
+		Products:     []string{"transactions"},
+	})
+}
+
+// getLinkUpdateToken returns a link token for use in the link "update" flow.
+func (p *PlaidQIF) getLinkUpdateToken(ins institutions.Institution) (string, error) {
+	return p.createLinkToken(plaid.LinkTokenConfigs{
+		User: &plaid.LinkTokenUser{
+			ClientUserID: p.userID,
+		},
+		ClientName:   p.clientName,
+		CountryCodes: []string{p.plaidCountry},
+		Language:     "en",
+		AccessToken:  ins.AccessToken,
+	})
+}
+
+func (p *PlaidQIF) createLinkToken(req plaid.LinkTokenConfigs) (string, error) {
+	resp, err := p.client.CreateLinkToken(req)
+	if err != nil {
+		return "", fmt.Errorf("unable to create link token, request ID: '%s', err: %w",
+			resp.RequestID, err)
+	}
+
+	return resp.LinkToken, nil
 }

@@ -18,15 +18,7 @@ const updateTempl = `<html>
         <script src="https://cdn.plaid.com/link/v2/stable/link-initialize.js"></script>
         <script>
             var linkHandler = Plaid.create({
-                env: '{{.Environment}}',
-                clientName: '{{.ClientName}}',
-                countryCodes: ['{{.Country}}'],
-                key: '{{.PublicKey}}',
-                product: 'transactions',
-                apiVersion: 'v2',
-                // update mode
-                // from https://plaid.com/docs/maintain-legacy-integration/#updating-items-via-link: POST /item/public_token/create, client_id and secret from dashboard, access token from institution
-                token: '{{.PublicToken}}',
+                token: '{{.LinkToken}}',
                 onSuccess: function(publicToken, metadata) {
                     let insName = "{{.Institution}}";
 
@@ -61,13 +53,11 @@ type updateFields struct {
 	Environment  string
 	ClientName   string
 	Country      string
-	PublicKey    string
-	PublicToken  string
 	Institution  string
 	CallbackPath string
+	LinkToken    string
 }
 
-// TODO update to use link tokens: https://plaid.com/docs/upgrade-to-link-tokens/
 func (p *PlaidQIF) UpdateInstitution(insName string) error {
 	const (
 		updatePath   = "/update"
@@ -79,8 +69,13 @@ func (p *PlaidQIF) UpdateInstitution(insName string) error {
 		return err
 	}
 
+	linkToken, err := p.getLinkUpdateToken(ins)
+	if err != nil {
+		return err
+	}
+
 	errs := make(chan error)
-	updateHandler, err := p.updateHandler(ins, callbackPath, errs)
+	updateHandler, err := p.updateHandler(callbackPath, linkToken, ins.Name, errs)
 	if err != nil {
 		return err
 	}
@@ -98,20 +93,14 @@ func (p *PlaidQIF) UpdateInstitution(insName string) error {
 	return <-errs
 }
 
-func (p *PlaidQIF) updateHandler(ins institutions.Institution, callbackPath string, errChan chan<- error) (http.HandlerFunc, error) {
-	resp, err := p.client.CreatePublicToken(ins.AccessToken)
-	if err != nil {
-		return nil, fmt.Errorf("failed to get public token for update link flow: %w", err)
-	}
-
+func (p *PlaidQIF) updateHandler(callbackPath, linkToken, institution string, errChan chan<- error) (http.HandlerFunc, error) {
 	lf := updateFields{
 		Environment:  p.plaidEnv,
 		ClientName:   p.clientName,
 		Country:      p.plaidCountry,
-		PublicKey:    p.publicKey,
-		PublicToken:  resp.PublicToken,
-		Institution:  ins.Name,
+		Institution:  institution,
 		CallbackPath: callbackPath,
+		LinkToken:    linkToken,
 	}
 
 	return func(rw http.ResponseWriter, _ *http.Request) {
