@@ -27,12 +27,14 @@ type Transaction struct {
 	Date   time.Time
 	Payee  string
 	Amount float64
+	Memo   string
 }
 
 type transaction struct {
 	Date   string
 	Payee  string
 	Amount string
+	Memo   string
 }
 
 const headerFmt = `!Account
@@ -46,6 +48,9 @@ const txFmt = `
 D{{.Date}}
 P{{.Payee}}
 T{{.Amount}}
+{{- if .Memo}}
+M{{.Memo}}
+{{- end}}
 ^`
 
 var (
@@ -110,6 +115,7 @@ func (w *Writer) writeTransaction(tx Transaction) error {
 		Date:   tx.Date.Format(w.dateFormat),
 		Payee:  tx.Payee,
 		Amount: strconv.FormatFloat(-tx.Amount, 'f', 2, 64),
+		Memo:   tx.Memo,
 	}
 
 	if err := txTemplate.Execute(w.w, transaction); err != nil {

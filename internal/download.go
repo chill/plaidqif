@@ -54,10 +54,8 @@ func (p *PlaidQIF) DownloadTransactions(institutionNames []string, fr, to, outDi
 }
 
 func (p *PlaidQIF) downloadInstitutionTransactions(ins institutions.Institution, from, until time.Time, outDir string) error {
-
 	ins, accounts, err := p.getInstitutionAccounts(ins)
 	if err != nil {
-
 		return err
 	}
 
@@ -168,11 +166,17 @@ func convertTransactions(transactions []plaid.Transaction) ([]qif.Transaction, e
 			return nil, fmt.Errorf("failed to parse transaction date for payee '%s' with date string '%s: %w", payee, tx.Date, err)
 		}
 
-		txs = append(txs, qif.Transaction{
+		qiftx := qif.Transaction{
 			Date:   date,
 			Payee:  payee,
 			Amount: tx.Amount,
-		})
+		}
+
+		if tx.Pending {
+			qiftx.Memo = "Pending"
+		}
+
+		txs = append(txs, qiftx)
 	}
 
 	return txs, nil

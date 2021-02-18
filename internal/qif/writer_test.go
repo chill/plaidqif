@@ -26,25 +26,55 @@ TCCard
 }
 
 func TestWriteTransaction(t *testing.T) {
-	var out bytes.Buffer
-	w := NewWriter(&out, "testAcct", "CCard", "02/01/2006")
-
-	if err := w.writeTransaction(Transaction{
-		Date:   time.Date(2020, 1, 1, 0, 0, 0, 0, time.UTC),
-		Payee:  "testPayee",
-		Amount: 10.26,
-	}); err != nil {
-		t.Fatal(err)
-	}
-
-	expect := `
+	tests := []struct {
+		Name   string
+		Tx     Transaction
+		Expect string
+	}{
+		{
+			Name: "WithMemo",
+			Tx: Transaction{
+				Date:   time.Date(2020, 1, 1, 0, 0, 0, 0, time.UTC),
+				Payee:  "testPayee",
+				Amount: 10.26,
+				Memo:   "abcdef",
+			},
+			Expect: `
 D01/01/2020
 PtestPayee
 T-10.26
-^`
+Mabcdef
+^`,
+		},
+		{
+			Name: "WithoutMemo",
+			Tx: Transaction{
+				Date:   time.Date(2020, 1, 1, 0, 0, 0, 0, time.UTC),
+				Payee:  "testPayee",
+				Amount: 10.26,
+			},
+			Expect: `
+D01/01/2020
+PtestPayee
+T-10.26
+^`,
+		},
+	}
 
-	if got := out.String(); got != expect {
-		t.Fatalf("expected:\n%s\n\ngot:\n%s", expect, got)
+	for _, tst := range tests {
+		tst := tst
+		t.Run(tst.Name, func(t *testing.T) {
+			var out bytes.Buffer
+			w := NewWriter(&out, "testAcct", "CCard", "02/01/2006")
+
+			if err := w.writeTransaction(tst.Tx); err != nil {
+				t.Fatal(err)
+			}
+
+			if got := out.String(); got != tst.Expect {
+				t.Fatalf("expected:\n%s\n\ngot:\n%s", tst.Expect, got)
+			}
+		})
 	}
 }
 
@@ -57,6 +87,7 @@ func TestWriteTransactions(t *testing.T) {
 			Date:   time.Date(2020, 1, 1, 0, 0, 0, 0, time.UTC),
 			Payee:  "testPayee1",
 			Amount: 10.26,
+			Memo:   "testMemo",
 		},
 		{
 			Date:   time.Date(2020, 1, 2, 0, 0, 0, 0, time.UTC),
@@ -76,6 +107,7 @@ TCCard
 D01/01/2020
 PtestPayee1
 T-10.26
+MtestMemo
 ^
 D02/01/2020
 PtestPayee2
