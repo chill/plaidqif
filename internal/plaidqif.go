@@ -1,6 +1,7 @@
 package internal
 
 import (
+	"context"
 	"fmt"
 	"net"
 	"strconv"
@@ -13,8 +14,8 @@ import (
 
 type PlaidQIF struct {
 	institutions *institutions.InstitutionManager
-	client       *plaid.Client
-	plaidCountry string
+	client       *plaid.PlaidApiService
+	plaidCountry plaid.CountryCode
 	plaidEnv     string
 	clientName   string
 	userID       string
@@ -43,6 +44,11 @@ func PlaidQif(confDir, plaidEnv, clientName, country, dateFormat string, listenP
 		return nil, fmt.Errorf("unknown plaid environment '%s'", plaidEnv)
 	}
 
+	countryCode, err := plaid.NewCountryCodeFromValue(country)
+	if err != nil {
+		return nil, fmt.Errorf("invalid plaid country code '%s': %w", country, err)
+	}
+
 	listenAddr := net.JoinHostPort("127.0.0.1", strconv.Itoa(listenPort))
 	if _, err := net.ResolveTCPAddr("tcp", listenAddr); err != nil {
 		return nil, fmt.Errorf("unable to resolve listen address '%s': %w", listenAddr, err)
@@ -53,19 +59,10 @@ func PlaidQif(confDir, plaidEnv, clientName, country, dateFormat string, listenP
 		return nil, err
 	}
 
-	client, err := plaid.NewClient(plaid.ClientOptions{
-		ClientID:    creds.ClientID,
-		Secret:      creds.Secret,
-		Environment: env,
-	})
-	if err != nil {
-		return nil, fmt.Errorf("failed to create plaid client: %w", err)
-	}
-
 	return &PlaidQIF{
 		institutions: institutionMgr,
-		client:       client,
-		plaidCountry: country,
+		client:       newPlaidClient(creds, env).PlaidApi,
+		plaidCountry: *countryCode,
 		plaidEnv:     plaidEnv,
 		clientName:   clientName,
 		userID:       creds.UserID,
@@ -81,36 +78,49 @@ func (p *PlaidQIF) Close() error {
 
 // getLinkToken returns a link token for use in the link "setup" flow.
 func (p *PlaidQIF) getLinkToken() (string, error) {
-	return p.createLinkToken(plaid.LinkTokenConfigs{
-		User: &plaid.LinkTokenUser{
-			ClientUserID: p.userID,
+	products := []plaid.Products{plaid.PRODUCTS_TRANSACTIONS}
+
+	return p.createLinkToken(plaid.LinkTokenCreateRequest{
+		User: plaid.LinkTokenCreateRequestUser{
+			ClientUserId: p.userID,
 		},
 		ClientName:   p.clientName,
-		CountryCodes: []string{p.plaidCountry},
+		CountryCodes: []plaid.CountryCode{p.plaidCountry},
 		Language:     "en",
-		Products:     []string{"transactions"},
+		Products:     &products,
 	})
 }
 
 // getLinkUpdateToken returns a link token for use in the link "update" flow.
 func (p *PlaidQIF) getLinkUpdateToken(ins institutions.Institution) (string, error) {
-	return p.createLinkToken(plaid.LinkTokenConfigs{
-		User: &plaid.LinkTokenUser{
-			ClientUserID: p.userID,
+	return p.createLinkToken(plaid.LinkTokenCreateRequest{
+		User: plaid.LinkTokenCreateRequestUser{
+			ClientUserId: p.userID,
 		},
 		ClientName:   p.clientName,
-		CountryCodes: []string{p.plaidCountry},
+		CountryCodes: []plaid.CountryCode{p.plaidCountry},
 		Language:     "en",
-		AccessToken:  ins.AccessToken,
+		AccessToken:  &ins.AccessToken,
 	})
 }
 
-func (p *PlaidQIF) createLinkToken(req plaid.LinkTokenConfigs) (string, error) {
-	resp, err := p.client.CreateLinkToken(req)
+func (p *PlaidQIF) createLinkToken(req plaid.LinkTokenCreateRequest) (string, error) {
+	r := p.client.LinkTokenCreate(context.TODO())
+	r = r.LinkTokenCreateRequest(req)
+	resp, _, err := r.Execute()
 	if err != nil {
 		return "", fmt.Errorf("unable to create link token, request ID: '%s', err: %w",
-			resp.RequestID, err)
+			resp.RequestId, err)
 	}
 
 	return resp.LinkToken, nil
+}
+
+func newPlaidClient(creds Credentials, env plaid.Environment) *plaid.APIClient {
+	configuration := plaid.NewConfiguration()
+	configuration.AddDefaultHeader("PLAID-CLIENT-ID", creds.ClientID)
+	configuration.AddDefaultHeader("PLAID-SECRET", creds.Secret)
+	configuration.UseEnvironment(env)
+	return plaid.NewAPIClient(configuration)
+
 }

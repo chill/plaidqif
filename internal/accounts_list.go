@@ -1,6 +1,7 @@
 package internal
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"text/tabwriter"
@@ -44,19 +45,29 @@ func (p *PlaidQIF) listInstitutionAccounts(tw *tabwriter.Writer, ins institution
 		qifType := plaidToQIFType[acct.Type]
 
 		fmt.Fprintln(tw, fmt.Sprintf("%s\t%s\t%s\t%s\t%s\t%s\t",
-			ins.Name, acct.Name, acct.Type, qifType, acct.AccountID, ins.ConsentExpires.Format(time.RFC822)))
+			ins.Name, acct.Name, acct.Type, qifType, acct.AccountId, ins.ConsentExpires.Format(time.RFC822)))
 	}
 
 	return nil
 }
 
-func (p *PlaidQIF) getInstitutionAccounts(ins institutions.Institution) (institutions.Institution, []plaid.Account, error) {
-	resp, err := p.client.GetAccounts(ins.AccessToken)
+func (p *PlaidQIF) getInstitutionAccounts(ins institutions.Institution) (institutions.Institution, []plaid.AccountBase, error) {
+	req := p.client.AccountsGet(context.TODO())
+	req = req.AccountsGetRequest(plaid.AccountsGetRequest{
+		AccessToken: ins.AccessToken,
+	})
+
+	resp, _, err := req.Execute()
 	if err != nil {
 		return ins, nil, fmt.Errorf("failed to get institution '%s' accounts from plaid: %w", ins.Name, err)
 	}
 
-	ins, err = p.institutions.UpdateConsentExpiry(ins.Name, resp.Item.ConsentExpirationTime)
+	expiry := resp.Item.ConsentExpirationTime.Get()
+	if expiry == nil {
+		panic(fmt.Errorf("error getting instutiton details for '%s', no consent expiry", ins.Name))
+	}
+
+	ins, err = p.institutions.UpdateConsentExpiry(ins.Name, *expiry)
 	if err != nil {
 		return ins, nil, fmt.Errorf("failed to update consent expiry for existing institution '%s': %w", ins.Name, err)
 	}

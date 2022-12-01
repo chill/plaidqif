@@ -1,12 +1,14 @@
 package internal
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"text/tabwriter"
 	"time"
 
 	"github.com/chill/plaidqif/internal/institutions"
+	"github.com/plaid/plaid-go/plaid"
 )
 
 func (p *PlaidQIF) ListInstitutions() error {
@@ -29,13 +31,21 @@ func (p *PlaidQIF) ListInstitutions() error {
 }
 
 func (p *PlaidQIF) printInstitutionDetails(tw *tabwriter.Writer, ins institutions.Institution) error {
-	resp, err := p.client.GetItem(ins.AccessToken)
+	itemGet := p.client.ItemGet(context.TODO())
+	itemGet = itemGet.ItemGetRequest(plaid.ItemGetRequest{AccessToken: ins.AccessToken})
+
+	resp, _, err := itemGet.Execute()
 	if err != nil {
 		return fmt.Errorf("unable to get institution details from plaid for institution '%s': %w",
 			ins.Name, err)
 	}
 
-	ins, err = p.institutions.UpdateConsentExpiry(ins.Name, resp.Item.ConsentExpirationTime)
+	expiry := resp.Item.ConsentExpirationTime.Get()
+	if expiry == nil {
+		panic(fmt.Errorf("error getting instutiton details for '%s', no consent expiry", ins.Name))
+	}
+
+	ins, err = p.institutions.UpdateConsentExpiry(ins.Name, *expiry)
 	if err != nil {
 		// this should never happen since we already got the institution above
 		panic(fmt.Errorf("failed to update consent expiry for existing institution '%s': %w", ins.Name, err))

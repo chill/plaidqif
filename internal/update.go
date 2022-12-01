@@ -1,15 +1,17 @@
 package internal
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
-	"io/ioutil"
+	"io"
 	"net/http"
 	"path"
 	"text/template"
 	"time"
 
 	"github.com/chill/plaidqif/internal/institutions"
+	"github.com/plaid/plaid-go/plaid"
 )
 
 const updateTempl = `<html>
@@ -97,7 +99,7 @@ func (p *PlaidQIF) updateHandler(callbackPath, linkToken, institution string, er
 	lf := updateFields{
 		Environment:  p.plaidEnv,
 		ClientName:   p.clientName,
-		Country:      p.plaidCountry,
+		Country:      string(p.plaidCountry),
 		Institution:  institution,
 		CallbackPath: callbackPath,
 		LinkToken:    linkToken,
@@ -120,7 +122,7 @@ type updateCallback struct {
 
 func (p *PlaidQIF) updateCallbackHandler(ins institutions.Institution, errChan chan<- error) http.HandlerFunc {
 	return func(rw http.ResponseWriter, req *http.Request) {
-		bs, err := ioutil.ReadAll(req.Body)
+		bs, err := io.ReadAll(req.Body)
 		if err != nil {
 			rw.WriteHeader(http.StatusInternalServerError)
 			errChan <- fmt.Errorf("unable to read callback body: %w", err)
@@ -145,8 +147,10 @@ func (p *PlaidQIF) updateCallbackHandler(ins institutions.Institution, errChan c
 		}
 
 		// we don't have to rotate the access token, we just need the updated consent expiry
+		itemGet := p.client.ItemGet(context.TODO())
+		itemGet = itemGet.ItemGetRequest(plaid.ItemGetRequest{AccessToken: ins.AccessToken})
 
-		itemResp, err := p.client.GetItem(ins.AccessToken)
+		itemResp, _, err := itemGet.Execute()
 		if err != nil {
 			rw.WriteHeader(http.StatusInternalServerError)
 			errChan <- fmt.Errorf("error looking up item with plaid using access token: %w", err)
@@ -154,16 +158,24 @@ func (p *PlaidQIF) updateCallbackHandler(ins institutions.Institution, errChan c
 			return
 		}
 
-		ins, err = p.institutions.UpdateConsentExpiry(ins.Name, itemResp.Item.ConsentExpirationTime)
-		if err != nil {
+		expiry := itemResp.Item.ConsentExpirationTime.Get()
+		if expiry == nil {
 			rw.WriteHeader(http.StatusInternalServerError)
-			errChan <- fmt.Errorf("error updating instutiton '%s' consent expiry to %s: %w",
-				ins.Name, itemResp.Item.ConsentExpirationTime.Format(time.RFC822), err)
+			errChan <- fmt.Errorf("error updating instutiton '%s', no consent expiry", ins.Name)
 			close(errChan)
 			return
 		}
 
-		fmt.Printf("updated instutiton '%s' consent expiry to %s\n", ins.Name, itemResp.Item.ConsentExpirationTime.Format(time.RFC822))
+		ins, err = p.institutions.UpdateConsentExpiry(ins.Name, *expiry)
+		if err != nil {
+			rw.WriteHeader(http.StatusInternalServerError)
+			errChan <- fmt.Errorf("error updating instutiton '%s' consent expiry to %s: %w",
+				ins.Name, expiry.Format(time.RFC822), err)
+			close(errChan)
+			return
+		}
+
+		fmt.Printf("updated instutiton '%s' consent expiry to %s\n", ins.Name, expiry.Format(time.RFC822))
 		close(errChan)
 		rw.WriteHeader(http.StatusOK)
 	}

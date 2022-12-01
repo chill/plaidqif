@@ -19,7 +19,7 @@ type Institution struct {
 	Name           string
 	AccessToken    string
 	ItemID         string
-	ConsentExpires *time.Time `json:",omitempty"`
+	ConsentExpires time.Time
 }
 
 // InstitutionManager is not safe for concurrent use
@@ -93,12 +93,12 @@ func (m *InstitutionManager) UpdateConsentExpiry(name string, newExpiry time.Tim
 	}
 
 	// noop if expiry already set and matches provided expiry
-	if ins.ConsentExpires != nil && ins.ConsentExpires.Equal(newExpiry) {
+	if !ins.ConsentExpires.IsZero() && ins.ConsentExpires.Equal(newExpiry) {
 		return ins, nil
 	}
 
 	expiry := newExpiry.UTC()
-	ins.ConsentExpires = &expiry
+	ins.ConsentExpires = expiry
 	m.institutions[name] = ins
 	return ins, nil
 }

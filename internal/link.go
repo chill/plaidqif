@@ -1,14 +1,16 @@
 package internal
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
-	"io/ioutil"
+	"io"
 	"net/http"
 	"path"
 	"text/template"
 
 	"github.com/chill/plaidqif/internal/institutions"
+	"github.com/plaid/plaid-go/plaid"
 )
 
 const linkTempl = `<html>
@@ -89,7 +91,7 @@ func (p *PlaidQIF) linkHandler(callbackPath, linkToken string, errChan chan<- er
 	lf := linkFields{
 		Environment:  p.plaidEnv,
 		ClientName:   p.clientName,
-		Country:      p.plaidCountry,
+		Country:      string(p.plaidCountry),
 		CallbackPath: callbackPath,
 		LinkToken:    linkToken,
 	}
@@ -113,7 +115,7 @@ type linkCallback struct {
 
 func (p *PlaidQIF) linkCallbackHandler(errChan chan<- error) http.HandlerFunc {
 	return func(rw http.ResponseWriter, req *http.Request) {
-		bs, err := ioutil.ReadAll(req.Body)
+		bs, err := io.ReadAll(req.Body)
 		if err != nil {
 			rw.WriteHeader(http.StatusInternalServerError)
 			errChan <- fmt.Errorf("unable to read callback body: %w", err)
@@ -129,7 +131,12 @@ func (p *PlaidQIF) linkCallbackHandler(errChan chan<- error) http.HandlerFunc {
 			return
 		}
 
-		tokResp, err := p.client.ExchangePublicToken(callbackReq.PublicToken)
+		tokReq := p.client.ItemPublicTokenExchange(context.TODO())
+		tokReq = tokReq.ItemPublicTokenExchangeRequest(plaid.ItemPublicTokenExchangeRequest{
+			PublicToken: callbackReq.PublicToken,
+		})
+
+		tokResp, _, err := tokReq.Execute()
 		if err != nil {
 			rw.WriteHeader(http.StatusInternalServerError)
 			errChan <- fmt.Errorf("error exchanging public token with plaid: %w", err)
@@ -137,7 +144,10 @@ func (p *PlaidQIF) linkCallbackHandler(errChan chan<- error) http.HandlerFunc {
 			return
 		}
 
-		itemResp, err := p.client.GetItem(tokResp.AccessToken)
+		itemGet := p.client.ItemGet(context.TODO())
+		itemGet = itemGet.ItemGetRequest(plaid.ItemGetRequest{AccessToken: tokResp.AccessToken})
+
+		itemResp, _, err := itemGet.Execute()
 		if err != nil {
 			rw.WriteHeader(http.StatusInternalServerError)
 			errChan <- fmt.Errorf("error looking up item with plaid using access token: %w", err)
@@ -145,11 +155,19 @@ func (p *PlaidQIF) linkCallbackHandler(errChan chan<- error) http.HandlerFunc {
 			return
 		}
 
+		expiry := itemResp.Item.ConsentExpirationTime.Get()
+		if expiry == nil {
+			rw.WriteHeader(http.StatusInternalServerError)
+			errChan <- fmt.Errorf("error updating instutiton '%s', no consent expiry", callbackReq.InstitutionName)
+			close(errChan)
+			return
+		}
+
 		institution := institutions.Institution{
 			Name:           callbackReq.InstitutionName,
 			AccessToken:    tokResp.AccessToken,
-			ItemID:         tokResp.ItemID,
-			ConsentExpires: &itemResp.Item.ConsentExpirationTime,
+			ItemID:         tokResp.ItemId,
+			ConsentExpires: *expiry,
 		}
 
 		if err := p.institutions.AddInstitution(institution); err != nil {

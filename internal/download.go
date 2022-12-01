@@ -1,10 +1,10 @@
 package internal
 
 import (
+	"context"
 	"fmt"
 	"path/filepath"
 	"regexp"
-	"strings"
 	"time"
 
 	"github.com/plaid/plaid-go/plaid"
@@ -17,9 +17,9 @@ import (
 const plaidDateFormat = "2006-01-02"
 
 var (
-	plaidToQIFType = map[string]string{
-		"credit":     "CCard",
-		"depository": "Bank",
+	plaidToQIFType = map[plaid.AccountType]string{
+		plaid.ACCOUNTTYPE_CREDIT:     "CCard",
+		plaid.ACCOUNTTYPE_DEPOSITORY: "Bank",
 	}
 	spaceRegex = regexp.MustCompile(`\s+`)
 )
@@ -78,23 +78,34 @@ func (p *PlaidQIF) downloadInstitutionTransactions(ins institutions.Institution,
 	return nil
 }
 
-func (p *PlaidQIF) downloadAccountTransactions(institution, accessToken string, acct plaid.Account, from, until time.Time, outDir string) error {
-	opts := plaid.GetTransactionsOptions{
-		StartDate:  from.Format(plaidDateFormat),
-		EndDate:    until.Format(plaidDateFormat),
-		AccountIDs: []string{acct.AccountID},
-		Offset:     0,
-		Count:      100,
+func (p *PlaidQIF) downloadAccountTransactions(institution, accessToken string, acct plaid.AccountBase, from, until time.Time, outDir string) error {
+	accountIDs := []string{acct.AccountId}
+	offset := int32(0)
+	count := int32(100)
+	req := &plaid.TransactionsGetRequest{
+		Options: &plaid.TransactionsGetRequestOptions{
+			AccountIds: &accountIDs,
+			Offset:     &offset,
+			Count:      &count,
+		},
+		AccessToken: accessToken,
+		StartDate:   from.Format(plaidDateFormat),
+		EndDate:     until.Format(plaidDateFormat),
 	}
 
-	resp, err := p.client.GetTransactionsWithOptions(accessToken, opts)
+	txGet := p.client.TransactionsGet(context.TODO())
+	txGet = txGet.TransactionsGetRequest(*req)
+
+	resp, _, err := txGet.Execute()
 	if err != nil {
 		return fmt.Errorf("failed to get transactions from plaid: %w", err)
 	}
 
 	total := resp.TotalTransactions
-	opts.Offset = len(resp.Transactions)
-
+	// req already contains a pointer to offset, so updating this updates the request for next time
+	offset = int32(len(resp.Transactions))
+	// but plaid's lib means we still have to update the ApiTransactionsGetRequest
+	txGet = txGet.TransactionsGetRequest(*req)
 	if total == 0 {
 		return nil
 	}
@@ -117,16 +128,19 @@ func (p *PlaidQIF) downloadAccountTransactions(institution, accessToken string, 
 			return err
 		}
 
-		if opts.Offset >= total {
+		if offset >= total {
 			break
 		}
 
-		resp, err = p.client.GetTransactionsWithOptions(accessToken, opts)
+		resp, _, err = txGet.Execute()
 		if err != nil {
 			return fmt.Errorf("failed to get transactions from plaid: %w", err)
 		}
 
-		opts.Offset += len(resp.Transactions)
+		// again, req already contains a pointer to offset, so updating this updates the request for next time
+		offset += int32(len(resp.Transactions))
+		// but plaid's lib means we still have to update the ApiTransactionsGetRequest
+		txGet = txGet.TransactionsGetRequest(*req)
 	}
 
 	if err := f.Close(); err != nil {
@@ -157,8 +171,8 @@ func convertTransactions(transactions []plaid.Transaction) ([]qif.Transaction, e
 	txs := make([]qif.Transaction, 0, len(transactions))
 	for _, tx := range transactions {
 		payee := tx.Name
-		if p := strings.TrimSpace(tx.PaymentMeta.Payee); p != "" {
-			payee = p
+		if p := tx.PaymentMeta.Payee.Get(); p != nil {
+			payee = *p
 		}
 
 		date, err := time.Parse(plaidDateFormat, tx.Date)
@@ -169,7 +183,7 @@ func convertTransactions(transactions []plaid.Transaction) ([]qif.Transaction, e
 		qiftx := qif.Transaction{
 			Date:   date,
 			Payee:  payee,
-			Amount: tx.Amount,
+			Amount: float64(tx.Amount),
 		}
 
 		if tx.Pending {
