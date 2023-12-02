@@ -30,8 +30,12 @@ type InstitutionManager struct {
 
 // NewInstitutionManager assumed confDir already exists.
 // The returned InstitutionManager is not safe for concurrent use.
-func NewInstitutionManager(confDir string) (*InstitutionManager, error) {
-	path := filepath.Join(confDir, "institutions.json")
+func NewInstitutionManager(confDir, filename string) (*InstitutionManager, error) {
+	if filename == "" {
+		filename = "institutions.json"
+	}
+
+	path := filepath.Join(confDir, filename)
 
 	var institutions institutions
 	err := files.Unmarshal(path, "institutions", &institutions)
@@ -109,6 +113,10 @@ func (m *InstitutionManager) WriteInstitutions() error {
 
 // GetInstitutions returns all institutions if len(names) == 0
 func (m *InstitutionManager) GetInstitutions(names []string) ([]Institution, error) {
+	if len(names) == 0 {
+		return m.List(), nil
+	}
+
 	is := make([]Institution, 0, len(names))
 
 	for _, name := range names {
@@ -118,10 +126,6 @@ func (m *InstitutionManager) GetInstitutions(names []string) ([]Institution, err
 		}
 
 		is = append(is, ins)
-	}
-
-	if len(is) == 0 {
-		is = m.List()
 	}
 
 	return is, nil

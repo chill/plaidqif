@@ -54,7 +54,7 @@ func PlaidQif(confDir, plaidEnv, clientName, country, dateFormat string, listenP
 		return nil, fmt.Errorf("unable to resolve listen address '%s': %w", listenAddr, err)
 	}
 
-	institutionMgr, err := institutions.NewInstitutionManager(confDir)
+	institutionMgr, err := institutions.NewInstitutionManager(confDir, "")
 	if err != nil {
 		return nil, err
 	}

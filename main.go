@@ -5,7 +5,7 @@ import (
 	"path/filepath"
 	"time"
 
-	"gopkg.in/alecthomas/kingpin.v2"
+	"github.com/alecthomas/kingpin/v2"
 
 	"github.com/chill/plaidqif/internal"
 	"github.com/chill/plaidqif/internal/osutil"
