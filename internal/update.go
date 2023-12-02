@@ -160,10 +160,9 @@ func (p *PlaidQIF) updateCallbackHandler(ins institutions.Institution, errChan c
 
 		expiry := itemResp.Item.ConsentExpirationTime.Get()
 		if expiry == nil {
-			rw.WriteHeader(http.StatusInternalServerError)
-			errChan <- fmt.Errorf("error updating instutiton '%s', no consent expiry", ins.Name)
-			close(errChan)
-			return
+			// some items can have no expiry we can get at, let's set those 100 years into the future...
+			future := time.Now().AddDate(100, 0, 0)
+			expiry = &future
 		}
 
 		ins, err = p.institutions.UpdateConsentExpiry(ins.Name, *expiry)

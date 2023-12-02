@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"path"
 	"text/template"
+	"time"
 
 	"github.com/chill/plaidqif/internal/institutions"
 	"github.com/plaid/plaid-go/plaid"
@@ -157,10 +158,9 @@ func (p *PlaidQIF) linkCallbackHandler(errChan chan<- error) http.HandlerFunc {
 
 		expiry := itemResp.Item.ConsentExpirationTime.Get()
 		if expiry == nil {
-			rw.WriteHeader(http.StatusInternalServerError)
-			errChan <- fmt.Errorf("error updating instutiton '%s', no consent expiry", callbackReq.InstitutionName)
-			close(errChan)
-			return
+			// some items can have no expiry we can get at, let's set those 100 years into the future...
+			future := time.Now().AddDate(100, 0, 0)
+			expiry = &future
 		}
 
 		institution := institutions.Institution{

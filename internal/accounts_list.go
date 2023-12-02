@@ -64,7 +64,9 @@ func (p *PlaidQIF) getInstitutionAccounts(ins institutions.Institution) (institu
 
 	expiry := resp.Item.ConsentExpirationTime.Get()
 	if expiry == nil {
-		panic(fmt.Errorf("error getting instutiton details for '%s', no consent expiry", ins.Name))
+		// some items can have no expiry we can get at, let's set those 100 years into the future...
+		future := time.Now().AddDate(100, 0, 0)
+		expiry = &future
 	}
 
 	ins, err = p.institutions.UpdateConsentExpiry(ins.Name, *expiry)
